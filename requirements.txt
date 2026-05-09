@@ -2,5 +2,10 @@ streamlit
 pandas
 numpy
 matplotlib
+seaborn
 scikit-learn
 pydeck
+geopandas
+shapely
+fiona
+pyproj
