@@ -469,9 +469,6 @@ with tab5:
         st.pyplot(fig)
 
 # =========================================================
-# TAB 6 — MAP VIEW
-# =========================================================
-
 # =========================================================
 # TAB 6 — MAP VIEW
 # =========================================================
@@ -484,31 +481,26 @@ with tab6:
 
         st.write("Coordinate file columns:", coords.columns.tolist())
 
-        # Detect coordinate columns
-        lat_candidates = ["latitude", "lat", "y"]
-        lon_candidates = ["longitude", "lon", "long", "x"]
-
-        lat_col = next((c for c in lat_candidates if c in coords.columns), None)
-        lon_col = next((c for c in lon_candidates if c in coords.columns), None)
-
-        if lat_col is None or lon_col is None:
-            st.error("Could not find latitude/longitude columns. Rename them to latitude and longitude.")
-            st.stop()
-
-        if "plot_id" not in coords.columns:
-            st.error("plotcoordinates.csv must contain plot_id.")
-            st.stop()
-
-        coords = coords.rename(columns={
-            lat_col: "latitude",
-            lon_col: "longitude"
-        })
+        # Keep only needed coordinate columns
+        coords = coords[["plot_id", "latitude", "longitude"]].copy()
 
         coords["plot_id"] = coords["plot_id"].astype(str).str.strip()
+        coords["latitude"] = pd.to_numeric(coords["latitude"], errors="coerce")
+        coords["longitude"] = pd.to_numeric(coords["longitude"], errors="coerce")
+
         df_map = df.copy()
         df_map["plot_id"] = df_map["plot_id"].astype(str).str.strip()
 
+        # Remove any coordinate columns from results file before merging
+        df_map = df_map.drop(
+            columns=["latitude", "longitude", "lat", "lon", "long", "x", "y"],
+            errors="ignore"
+        )
+
+        # Merge clean coordinates with results
         map_df = coords.merge(df_map, on="plot_id", how="left")
+
+        st.write("Merged map columns:", map_df.columns.tolist())
 
         map_options = [
             col for col in map_df.select_dtypes(include="number").columns
@@ -516,7 +508,7 @@ with tab6:
         ]
 
         if len(map_options) == 0:
-            st.warning("No numeric variables available to map after merging.")
+            st.warning("No numeric variables available to map.")
             st.stop()
 
         selected_value = st.selectbox("Select variable to map", map_options)
@@ -531,11 +523,11 @@ with tab6:
         )
 
         st.dataframe(
-            map_df[["plot_id", "latitude", "longitude", selected_value]].head(20)
+            map_df[["plot_id", "latitude", "longitude", selected_value]]
         )
 
     except FileNotFoundError:
-        st.warning("plotcoordinates.csv not found. Upload it to GitHub first.")
+        st.warning("plotcoordinates.csv not found.")
 
     except Exception as e:
         st.error(f"Map failed to load: {e}")
