@@ -470,64 +470,144 @@ with tab5:
 
 # =========================================================
 # =========================================================
-# TAB 6 — MAP VIEW
+# =========================================================
+# TAB 6 — MAP VIEW WITH ACTUAL PLOT SHAPES
 # =========================================================
 with tab6:
-    st.header("Spatial View")
+    st.header("Spatial View - Plot Boundaries")
+
+    import json
+    import pydeck as pdk
 
     try:
-        coords = pd.read_csv("plotcoordinates.csv")
-        coords.columns = coords.columns.str.strip().str.lower()
+        # Load GeoJSON plot boundaries
+        with open("mergedplots.geojson", "r", encoding="utf-8") as f:
+            geojson_data = json.load(f)
 
-        st.write("Coordinate file columns:", coords.columns.tolist())
-
-        # Keep only needed coordinate columns
-        coords = coords[["plot_id", "latitude", "longitude"]].copy()
-
-        coords["plot_id"] = coords["plot_id"].astype(str).str.strip()
-        coords["latitude"] = pd.to_numeric(coords["latitude"], errors="coerce")
-        coords["longitude"] = pd.to_numeric(coords["longitude"], errors="coerce")
-
+        # Clean result data
         df_map = df.copy()
+        df_map.columns = df_map.columns.str.strip().str.lower()
         df_map["plot_id"] = df_map["plot_id"].astype(str).str.strip()
 
-        # Remove any coordinate columns from results file before merging
-        df_map = df_map.drop(
-            columns=["latitude", "longitude", "lat", "lon", "long", "x", "y"],
-            errors="ignore"
-        )
+        # Create lookup dictionary by plot_id
+        result_lookup = df_map.set_index("plot_id").to_dict("index")
 
-        # Merge clean coordinates with results
-        map_df = coords.merge(df_map, on="plot_id", how="left")
+        # Attach model results to GeoJSON properties
+        for feature in geojson_data["features"]:
+            props = feature["properties"]
 
-        st.write("Merged map columns:", map_df.columns.tolist())
+            # clean property keys
+            clean_props = {
+                str(k).strip().lower(): v
+                for k, v in props.items()
+            }
 
-        map_options = [
-            col for col in map_df.select_dtypes(include="number").columns
-            if col not in ["latitude", "longitude"]
+            plot_id = str(clean_props.get("plot_id", "")).strip()
+
+            if plot_id in result_lookup:
+                clean_props.update(result_lookup[plot_id])
+
+            feature["properties"] = clean_props
+
+        # Get available numeric variables for map display
+        sample_props = geojson_data["features"][0]["properties"]
+
+        numeric_cols = [
+            k for k, v in sample_props.items()
+            if isinstance(v, (int, float))
         ]
 
-        if len(map_options) == 0:
-            st.warning("No numeric variables available to map.")
+        numeric_cols = [
+            c for c in numeric_cols
+            if c not in ["latitude", "longitude"]
+        ]
+
+        if len(numeric_cols) == 0:
+            st.warning("No numeric variables found in GeoJSON/result data.")
             st.stop()
 
-        selected_value = st.selectbox("Select variable to map", map_options)
-
-        map_df = map_df.dropna(subset=["latitude", "longitude"])
-
-        st.map(
-            map_df,
-            latitude="latitude",
-            longitude="longitude",
-            size=80
+        selected_value = st.selectbox(
+            "Select variable to visualize",
+            numeric_cols
         )
 
-        st.dataframe(
-            map_df[["plot_id", "latitude", "longitude", selected_value]]
+        # Calculate map center from all polygon coordinates
+        all_lons = []
+        all_lats = []
+
+        for feature in geojson_data["features"]:
+            geom = feature["geometry"]
+
+            if geom["type"] == "Polygon":
+                rings = geom["coordinates"]
+                for ring in rings:
+                    for lon, lat in ring:
+                        all_lons.append(lon)
+                        all_lats.append(lat)
+
+            elif geom["type"] == "MultiPolygon":
+                polygons = geom["coordinates"]
+                for polygon in polygons:
+                    for ring in polygon:
+                        for lon, lat in ring:
+                            all_lons.append(lon)
+                            all_lats.append(lat)
+
+        center_lon = sum(all_lons) / len(all_lons)
+        center_lat = sum(all_lats) / len(all_lats)
+
+        # Polygon layer
+        polygon_layer = pdk.Layer(
+            "GeoJsonLayer",
+            data=geojson_data,
+            pickable=True,
+            stroked=True,
+            filled=True,
+            opacity=0.6,
+            get_fill_color="""
+            [
+                255 - properties.%s * 200,
+                properties.%s * 255,
+                100,
+                180
+            ]
+            """ % (selected_value, selected_value),
+            get_line_color="[0, 0, 0]",
+            line_width_min_pixels=1
+        )
+
+        view_state = pdk.ViewState(
+            latitude=center_lat,
+            longitude=center_lon,
+            zoom=15,
+            pitch=0
+        )
+
+        tooltip = {
+            "html": f"""
+            <b>Plot:</b> {{plot_id}}<br/>
+            <b>Cultivar:</b> {{cultivar}}<br/>
+            <b>{selected_value}:</b> {{{selected_value}}}<br/>
+            <b>Yield:</b> {{yield}}<br/>
+            <b>Predicted:</b> {{predicted_yield}}
+            """,
+            "style": {
+                "backgroundColor": "black",
+                "color": "white"
+            }
+        }
+
+        st.pydeck_chart(
+            pdk.Deck(
+                initial_view_state=view_state,
+                layers=[polygon_layer],
+                tooltip=tooltip,
+                map_style="light"
+            )
         )
 
     except FileNotFoundError:
-        st.warning("plotcoordinates.csv not found.")
+        st.warning("merged_plots_latest.geojson not found. Upload it to GitHub.")
 
     except Exception as e:
         st.error(f"Map failed to load: {e}")
