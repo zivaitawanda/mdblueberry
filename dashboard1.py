@@ -479,15 +479,15 @@ with tab6:
     st.header("Spatial View")
 
     try:
-        coords = pd.read_csv("plot_coordinates.csv")
+        coords = pd.read_csv("plotcoordinates.csv")
         coords.columns = coords.columns.str.strip().str.lower()
 
         if "plot_id" not in coords.columns:
-            st.error("plot_coordinates.csv must contain plot_id.")
+            st.error("plotcoordinates.csv must contain plot_id.")
             st.stop()
 
         if "latitude" not in coords.columns or "longitude" not in coords.columns:
-            st.error("plot_coordinates.csv must contain latitude and longitude.")
+            st.error("plotcoordinates.csv must contain latitude and longitude.")
             st.stop()
 
         # Clean plot_id in both files
@@ -524,7 +524,7 @@ with tab6:
         )
 
     except FileNotFoundError:
-        st.warning("plot_coordinates.csv not found. Upload it to GitHub first.")
+        st.warning("plotcoordinates.csv not found. Upload it to GitHub first.")
 
     except Exception as e:
         st.error(f"Map failed to load: {e}")
