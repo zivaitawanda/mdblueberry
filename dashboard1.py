@@ -482,35 +482,46 @@ with tab6:
         coords = pd.read_csv("plotcoordinates.csv")
         coords.columns = coords.columns.str.strip().str.lower()
 
+        st.write("Coordinate file columns:", coords.columns.tolist())
+
+        # Detect coordinate columns
+        lat_candidates = ["latitude", "lat", "y"]
+        lon_candidates = ["longitude", "lon", "long", "x"]
+
+        lat_col = next((c for c in lat_candidates if c in coords.columns), None)
+        lon_col = next((c for c in lon_candidates if c in coords.columns), None)
+
+        if lat_col is None or lon_col is None:
+            st.error("Could not find latitude/longitude columns. Rename them to latitude and longitude.")
+            st.stop()
+
         if "plot_id" not in coords.columns:
             st.error("plotcoordinates.csv must contain plot_id.")
             st.stop()
 
-        if "latitude" not in coords.columns or "longitude" not in coords.columns:
-            st.error("plotcoordinates.csv must contain latitude and longitude.")
-            st.stop()
+        coords = coords.rename(columns={
+            lat_col: "latitude",
+            lon_col: "longitude"
+        })
 
-        # Clean plot_id in both files
         coords["plot_id"] = coords["plot_id"].astype(str).str.strip()
         df_map = df.copy()
         df_map["plot_id"] = df_map["plot_id"].astype(str).str.strip()
 
-        # Merge coordinates with model results
         map_df = coords.merge(df_map, on="plot_id", how="left")
 
-        # Select value to map
         map_options = [
             col for col in map_df.select_dtypes(include="number").columns
             if col not in ["latitude", "longitude"]
         ]
 
-        selected_value = st.selectbox(
-            "Select variable to map",
-            map_options
-        )
+        if len(map_options) == 0:
+            st.warning("No numeric variables available to map after merging.")
+            st.stop()
 
-        # Remove rows without coordinates or selected value
-        map_df = map_df.dropna(subset=["latitude", "longitude", selected_value])
+        selected_value = st.selectbox("Select variable to map", map_options)
+
+        map_df = map_df.dropna(subset=["latitude", "longitude"])
 
         st.map(
             map_df,
@@ -524,7 +535,7 @@ with tab6:
         )
 
     except FileNotFoundError:
-        st.warning("upload failed")
+        st.warning("plotcoordinates.csv not found. Upload it to GitHub first.")
 
     except Exception as e:
         st.error(f"Map failed to load: {e}")
