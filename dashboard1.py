@@ -9,9 +9,7 @@ import seaborn as sns
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestRegressor
-import geopandas as gpd
-import pydeck as pdk
-import os
+
 
 # =========================================================
 # CONFIG
@@ -473,57 +471,10 @@ with tab5:
 # =========================================================
 # TAB 6 — MAP VIEW
 # =========================================================
+
 with tab6:
-
     st.header("Spatial View")
-
-    try:
-
-        gdf = gpd.read_file(
-            "merged_plots_latest.gpkg"
-        )
-
-        gdf.columns = (
-            gdf.columns
-            .str.strip()
-            .str.lower()
-        )
-
-        key = "plot_id"
-
-        if key in gdf.columns and key in df.columns:
-
-            gdf = gdf.merge(
-                df,
-                on=key,
-                how="left"
-            )
-
-            gdf = gdf.to_crs(epsg=4326)
-
-            centroid = gdf.geometry.centroid
-
-            st.map(
-                pd.DataFrame({
-                    "lat": centroid.y,
-                    "lon": centroid.x
-                })
-            )
-
-        else:
-
-            st.warning(
-                "plot_id missing in datasets"
-            )
-
-    except Exception as e:
-
-        st.warning(
-            "Map view disabled or failed to load."
-        )
-
-        st.error(e)
-
+    st.info("Map view temporarily disabled for cloud deployment.")
 # =========================================================
 # TAB 7 — DATA
 # =========================================================
