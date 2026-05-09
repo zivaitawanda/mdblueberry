@@ -489,6 +489,9 @@ with tab6:
         df_map.columns = df_map.columns.str.strip().str.lower()
         df_map["plot_id"] = df_map["plot_id"].astype(str).str.strip()
 
+# Remove duplicate plot_id records
+        df_map = df_map.drop_duplicates(subset="plot_id", keep="first")
+
         # Create lookup dictionary by plot_id
         result_lookup = df_map.set_index("plot_id").to_dict("index")
 
