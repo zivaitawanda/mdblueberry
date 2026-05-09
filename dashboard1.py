@@ -524,7 +524,7 @@ with tab6:
         )
 
     except FileNotFoundError:
-        st.warning("plotcoordinates.csv not found. Upload it to GitHub first.")
+        st.warning("upload failed")
 
     except Exception as e:
         st.error(f"Map failed to load: {e}")
