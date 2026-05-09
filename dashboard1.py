@@ -746,8 +746,15 @@ with tab7:
 # =========================================================
 with tab8:
 
-    st.header(
-        "Best Time to Separate Cultivars and Predict Yield"
+    st.header("Best Time to Separate Cultivars and Predict Yield")
+
+    st.markdown(
+        """
+        This section answers two simple questions:
+
+        **1. When is the best time to tell blueberry cultivars apart?**  
+        **2. When is the best time to predict yield?**
+        """
     )
 
     stages = [
@@ -758,6 +765,7 @@ with tab8:
         "harvest"
     ]
 
+    # Known JM distance results
     jm_stage_df = pd.DataFrame({
         "stage": [
             "newshoots",
@@ -777,18 +785,17 @@ with tab8:
         "yield",
         "predicted_yield",
         "error",
+        "abs_error",
         "cultivar",
         "model",
         "model_clean",
-        "plot_id"
+        "plot_id",
+        "latitude",
+        "longitude"
     ]
 
     feature_cols = [
-        col for col in (
-            df_vis
-            .select_dtypes(include="number")
-            .columns
-        )
+        col for col in df_vis.select_dtypes(include="number").columns
         if col not in exclude_cols
     ]
 
@@ -813,12 +820,23 @@ with tab8:
             feature
             .lower()
             .replace(" ", "")
+            .replace("_", "")
         )
 
-        for stage in stages:
+        if "newshoot" in feature or "newleaf" in feature:
+            return "newshoots"
 
-            if stage in feature:
-                return stage
+        if "budding" in feature or "bud" in feature:
+            return "budding"
+
+        if "fruitset" in feature:
+            return "fruitset"
+
+        if "fruitdevelopment" in feature or "fruitdev" in feature:
+            return "fruitdevelopment"
+
+        if "harvest" in feature:
+            return "harvest"
 
         return "other"
 
@@ -831,15 +849,10 @@ with tab8:
         })
     )
 
-    importance_df["stage"] = (
-        importance_df["feature"]
-        .apply(get_stage)
-    )
+    importance_df["stage"] = importance_df["feature"].apply(get_stage)
 
     stage_importance_df = (
-        importance_df[
-            importance_df["stage"] != "other"
-        ]
+        importance_df[importance_df["stage"] != "other"]
         .groupby("stage", as_index=False)["importance"]
         .sum()
     )
@@ -851,31 +864,190 @@ with tab8:
         how="outer"
     ).fillna(0)
 
-    fig, ax1 = plt.subplots(figsize=(9, 5))
-
-    sns.lineplot(
-        data=merged_df,
-        x="stage",
-        y="jm_distance",
-        marker="o",
-        ax=ax1,
-        label="JM Distance"
+    # Keep stages in correct crop-growth order
+    merged_df["stage"] = pd.Categorical(
+        merged_df["stage"],
+        categories=stages,
+        ordered=True
     )
 
-    ax2 = ax1.twinx()
+    merged_df = merged_df.sort_values("stage")
 
-    sns.lineplot(
-        data=merged_df,
-        x="stage",
-        y="importance",
-        marker="s",
-        linestyle="--",
-        ax=ax2,
-        label="Yield Importance"
+    # Normalize scores so layman can compare them easily
+    merged_df["separation_score"] = (
+        merged_df["jm_distance"] / merged_df["jm_distance"].max()
+    ) * 100
+
+    merged_df["yield_score"] = (
+        merged_df["importance"] / merged_df["importance"].max()
+    ) * 100
+
+    merged_df["overall_score"] = (
+        merged_df["separation_score"] + merged_df["yield_score"]
+    ) / 2
+
+    best_separation = merged_df.loc[
+        merged_df["separation_score"].idxmax()
+    ]
+
+    best_yield = merged_df.loc[
+        merged_df["yield_score"].idxmax()
+    ]
+
+    best_overall = merged_df.loc[
+        merged_df["overall_score"].idxmax()
+    ]
+
+    # -----------------------------------------------------
+    # SUMMARY CARDS
+    # -----------------------------------------------------
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.metric(
+            "Best for separating cultivars",
+            str(best_separation["stage"]).title(),
+            f'JM = {best_separation["jm_distance"]:.2f}'
+        )
+
+    with col2:
+        st.metric(
+            "Best for predicting yield",
+            str(best_yield["stage"]).title(),
+            f'Score = {best_yield["yield_score"]:.0f}/100'
+        )
+
+    with col3:
+        st.metric(
+            "Best overall timing",
+            str(best_overall["stage"]).title(),
+            f'Overall = {best_overall["overall_score"]:.0f}/100'
+        )
+
+    st.success(
+        f"""
+        **Main finding:** The best overall time is **{str(best_overall["stage"]).title()}**.
+        At this stage, the crop provides useful information for both identifying cultivar differences
+        and estimating yield.
+        """
     )
 
-    ax1.set_title(
-        "Best Timing for Cultivar Separation and Yield Prediction"
+    st.info(
+        """
+        **How to read this:**  
+        A higher **separation score** means the cultivars look more different from each other.  
+        A higher **yield prediction score** means the image features from that stage are more useful
+        for estimating final yield.
+        """
     )
+
+    # -----------------------------------------------------
+    # LAYMAN-FRIENDLY TABLE
+    # -----------------------------------------------------
+    display_df = merged_df.copy()
+
+    display_df["Growth Stage"] = (
+        display_df["stage"]
+        .astype(str)
+        .str.replace("newshoots", "New Shoots")
+        .str.replace("fruitdevelopment", "Fruit Development")
+        .str.replace("fruitset", "Fruit Set")
+        .str.replace("budding", "Budding")
+        .str.replace("harvest", "Harvest")
+    )
+
+    display_df["Cultivar Separation Score"] = (
+        display_df["separation_score"]
+        .round(0)
+        .astype(int)
+    )
+
+    display_df["Yield Prediction Score"] = (
+        display_df["yield_score"]
+        .round(0)
+        .astype(int)
+    )
+
+    display_df["Overall Usefulness"] = (
+        display_df["overall_score"]
+        .round(0)
+        .astype(int)
+    )
+
+    display_df = display_df[
+        [
+            "Growth Stage",
+            "Cultivar Separation Score",
+            "Yield Prediction Score",
+            "Overall Usefulness"
+        ]
+    ]
+
+    st.subheader("Simple ranking of growth stages")
+
+    st.dataframe(
+        display_df.sort_values(
+            "Overall Usefulness",
+            ascending=False
+        ),
+        use_container_width=True,
+        hide_index=True
+    )
+
+    # -----------------------------------------------------
+    # BAR CHART
+    # -----------------------------------------------------
+    st.subheader("Comparison of growth stages")
+
+    chart_df = display_df.melt(
+        id_vars="Growth Stage",
+        value_vars=[
+            "Cultivar Separation Score",
+            "Yield Prediction Score",
+            "Overall Usefulness"
+        ],
+        var_name="Purpose",
+        value_name="Score"
+    )
+
+    fig, ax = plt.subplots(figsize=(11, 6))
+
+    sns.barplot(
+        data=chart_df,
+        x="Growth Stage",
+        y="Score",
+        hue="Purpose",
+        ax=ax
+    )
+
+    ax.set_title(
+        "Best Growth Stage for Cultivar Separation and Yield Prediction"
+    )
+
+    ax.set_ylabel("Score out of 100")
+    ax.set_xlabel("Growth Stage")
+    ax.set_ylim(0, 110)
+
+    plt.xticks(rotation=25)
+    plt.tight_layout()
 
     st.pyplot(fig)
+
+    # -----------------------------------------------------
+    # FINAL INTERPRETATION
+    # -----------------------------------------------------
+    st.subheader("Interpretation")
+
+    st.markdown(
+        f"""
+        - **{str(best_separation["stage"]).title()}** is the best stage for separating cultivars.
+        This means the satellite image features at this stage show the clearest differences
+        between cultivars such as Masena and Eureka.
+
+        - **{str(best_yield["stage"]).title()}** is the best stage for predicting yield.
+        This means the image features at this stage are most strongly linked to final production.
+
+        - **{str(best_overall["stage"]).title()}** is the best overall stage because it gives the
+        best balance between cultivar separation and yield prediction.
+        """
+    )
