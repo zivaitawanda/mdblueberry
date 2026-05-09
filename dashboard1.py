@@ -473,52 +473,88 @@ with tab5:
 # =========================================================
 # TAB 6 — MAP VIEW WITH ACTUAL PLOT SHAPES
 # =========================================================
+# =========================================================
+# TAB 6 — MAP VIEW WITH ACTUAL PLOT SHAPES
+# =========================================================
 with tab6:
+
     st.header("Spatial View - Plot Boundaries")
 
-    import json
+    import streamlit as st
+    import pandas as pd
     import pydeck as pdk
+    import json
 
     try:
-        # Load GeoJSON plot boundaries
+
+        # -------------------------------------------------
+        # LOAD GEOJSON
+        # -------------------------------------------------
         with open("mergedplots.geojson", "r", encoding="utf-8") as f:
             geojson_data = json.load(f)
 
-        # Clean result data
+        # -------------------------------------------------
+        # CLEAN RESULT DATA
+        # -------------------------------------------------
         df_map = df.copy()
-        df_map.columns = df_map.columns.str.strip().str.lower()
-        df_map["plot_id"] = df_map["plot_id"].astype(str).str.strip()
 
-# Remove duplicate plot_id records
-        df_map = df_map.drop_duplicates(subset="plot_id", keep="first")
+        df_map.columns = (
+            df_map.columns
+            .str.strip()
+            .str.lower()
+        )
 
-        # Create lookup dictionary by plot_id
-        result_lookup = df_map.set_index("plot_id").to_dict("index")
+        df_map["plot_id"] = (
+            df_map["plot_id"]
+            .astype(str)
+            .str.strip()
+        )
 
-        # Attach model results to GeoJSON properties
+        # Remove duplicate plot IDs
+        df_map = df_map.drop_duplicates(
+            subset="plot_id",
+            keep="first"
+        )
+
+        # -------------------------------------------------
+        # CREATE LOOKUP DICTIONARY
+        # -------------------------------------------------
+        result_lookup = (
+            df_map
+            .set_index("plot_id")
+            .to_dict("index")
+        )
+
+        # -------------------------------------------------
+        # MERGE CSV RESULTS INTO GEOJSON
+        # -------------------------------------------------
         for feature in geojson_data["features"]:
+
             props = feature["properties"]
 
-            # clean property keys
             clean_props = {
                 str(k).strip().lower(): v
                 for k, v in props.items()
             }
 
-            plot_id = str(clean_props.get("plot_id", "")).strip()
+            plot_id = str(
+                clean_props.get("plot_id", "")
+            ).strip()
 
             if plot_id in result_lookup:
                 clean_props.update(result_lookup[plot_id])
 
             feature["properties"] = clean_props
 
-        # Get available numeric variables for map display
-        sample_props = geojson_data["features"][0]["properties"]
-
-        numeric_cols = [
-            k for k, v in sample_props.items()
-            if isinstance(v, (int, float))
-        ]
+        # -------------------------------------------------
+        # GET NUMERIC VARIABLES
+        # -------------------------------------------------
+        numeric_cols = (
+            df_map
+            .select_dtypes(include="number")
+            .columns
+            .tolist()
+        )
 
         numeric_cols = [
             c for c in numeric_cols
@@ -526,73 +562,134 @@ with tab6:
         ]
 
         if len(numeric_cols) == 0:
-            st.warning("No numeric variables found in GeoJSON/result data.")
+            st.warning("No numeric variables found.")
             st.stop()
 
+        # -------------------------------------------------
+        # VARIABLE SELECTOR
+        # -------------------------------------------------
         selected_value = st.selectbox(
             "Select variable to visualize",
             numeric_cols
         )
 
-        # Calculate map center from all polygon coordinates
+        # -------------------------------------------------
+        # NORMALIZE VALUES FOR COLOURING
+        # -------------------------------------------------
+        values = df_map[selected_value].dropna()
+
+        min_val = values.min()
+        max_val = values.max()
+
+        for feature in geojson_data["features"]:
+
+            props = feature["properties"]
+
+            value = props.get(selected_value, None)
+
+            if (
+                value is not None
+                and pd.notna(value)
+                and max_val != min_val
+            ):
+                norm_value = (
+                    (value - min_val)
+                    / (max_val - min_val)
+                )
+            else:
+                norm_value = 0
+
+            props["color_value"] = float(norm_value)
+
+        # -------------------------------------------------
+        # CALCULATE MAP CENTER
+        # -------------------------------------------------
         all_lons = []
         all_lats = []
 
         for feature in geojson_data["features"]:
+
             geom = feature["geometry"]
 
+            # POLYGON
             if geom["type"] == "Polygon":
-                rings = geom["coordinates"]
-                for ring in rings:
+
+                for ring in geom["coordinates"]:
+
                     for lon, lat in ring:
+
                         all_lons.append(lon)
                         all_lats.append(lat)
 
+            # MULTIPOLYGON
             elif geom["type"] == "MultiPolygon":
-                polygons = geom["coordinates"]
-                for polygon in polygons:
+
+                for polygon in geom["coordinates"]:
+
                     for ring in polygon:
+
                         for lon, lat in ring:
+
                             all_lons.append(lon)
                             all_lats.append(lat)
+
+        # Safety check
+        if len(all_lons) == 0:
+            st.error(
+                "No valid coordinates found in GeoJSON."
+            )
+            st.stop()
 
         center_lon = sum(all_lons) / len(all_lons)
         center_lat = sum(all_lats) / len(all_lats)
 
-        # Polygon layer
+        # -------------------------------------------------
+        # POLYGON LAYER
+        # -------------------------------------------------
         polygon_layer = pdk.Layer(
             "GeoJsonLayer",
             data=geojson_data,
+
             pickable=True,
             stroked=True,
             filled=True,
-            opacity=0.6,
+
+            opacity=0.7,
+
             get_fill_color="""
             [
-                255 - properties.%s * 200,
-                properties.%s * 255,
+                255 - properties.color_value * 255,
+                properties.color_value * 255,
                 100,
                 180
             ]
-            """ % (selected_value, selected_value),
-            get_line_color="[0, 0, 0]",
-            line_width_min_pixels=1
+            """,
+
+            get_line_color="[255, 0, 0]",
+
+            line_width_min_pixels=2
         )
 
+        # -------------------------------------------------
+        # VIEW STATE
+        # -------------------------------------------------
         view_state = pdk.ViewState(
             latitude=center_lat,
             longitude=center_lon,
-            zoom=15,
+            zoom=16,
             pitch=0
         )
 
+        # -------------------------------------------------
+        # TOOLTIP
+        # -------------------------------------------------
         tooltip = {
             "html": f"""
-            <b>Plot:</b> {{plot_id}}<br/>
-            <b>Cultivar:</b> {{cultivar}}<br/>
-            <b>{selected_value}:</b> {{{selected_value}}}<br/>
-            <b>Yield:</b> {{yield}}<br/>
-            <b>Predicted:</b> {{predicted_yield}}
+            <b>Plot ID:</b> {{plot_id}} <br/>
+            <b>Cultivar:</b> {{cultivar}} <br/>
+            <b>{selected_value}:</b> {{{selected_value}}} <br/>
+            <b>Yield:</b> {{yield}} <br/>
+            <b>Predicted Yield:</b> {{predicted_yield}}
             """,
             "style": {
                 "backgroundColor": "black",
@@ -600,19 +697,37 @@ with tab6:
             }
         }
 
+        # -------------------------------------------------
+        # DISPLAY MAP
+        # -------------------------------------------------
         st.pydeck_chart(
             pdk.Deck(
-                initial_view_state=view_state,
                 layers=[polygon_layer],
+
+                initial_view_state=view_state,
+
                 tooltip=tooltip,
-                map_style="light"
-            )
+
+                # Remove basemap issues
+                map_style=None
+            ),
+
+            use_container_width=True
         )
 
+    # -----------------------------------------------------
+    # ERRORS
+    # -----------------------------------------------------
     except FileNotFoundError:
-        st.warning("merged_plots_latest.geojson not found. Upload it to GitHub.")
+
+        st.error(
+            "mergedplots.geojson not found. "
+            "Upload it to the same GitHub folder "
+            "as dashboard1.py"
+        )
 
     except Exception as e:
+
         st.error(f"Map failed to load: {e}")
 # =========================================================
 # TAB 7 — DATA
