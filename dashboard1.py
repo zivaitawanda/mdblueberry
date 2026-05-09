@@ -9,7 +9,7 @@ import seaborn as sns
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestRegressor
-
+import pydeck as pdk
 
 # =========================================================
 # CONFIG
@@ -472,9 +472,62 @@ with tab5:
 # TAB 6 — MAP VIEW
 # =========================================================
 
+# =========================================================
+# TAB 6 — MAP VIEW
+# =========================================================
 with tab6:
     st.header("Spatial View")
-    st.info("Map view temporarily disabled for cloud deployment.")
+
+    try:
+        coords = pd.read_csv("plot_coordinates.csv")
+        coords.columns = coords.columns.str.strip().str.lower()
+
+        if "plot_id" not in coords.columns:
+            st.error("plot_coordinates.csv must contain plot_id.")
+            st.stop()
+
+        if "latitude" not in coords.columns or "longitude" not in coords.columns:
+            st.error("plot_coordinates.csv must contain latitude and longitude.")
+            st.stop()
+
+        # Clean plot_id in both files
+        coords["plot_id"] = coords["plot_id"].astype(str).str.strip()
+        df_map = df.copy()
+        df_map["plot_id"] = df_map["plot_id"].astype(str).str.strip()
+
+        # Merge coordinates with model results
+        map_df = coords.merge(df_map, on="plot_id", how="left")
+
+        # Select value to map
+        map_options = [
+            col for col in map_df.select_dtypes(include="number").columns
+            if col not in ["latitude", "longitude"]
+        ]
+
+        selected_value = st.selectbox(
+            "Select variable to map",
+            map_options
+        )
+
+        # Remove rows without coordinates or selected value
+        map_df = map_df.dropna(subset=["latitude", "longitude", selected_value])
+
+        st.map(
+            map_df,
+            latitude="latitude",
+            longitude="longitude",
+            size=80
+        )
+
+        st.dataframe(
+            map_df[["plot_id", "latitude", "longitude", selected_value]].head(20)
+        )
+
+    except FileNotFoundError:
+        st.warning("plot_coordinates.csv not found. Upload it to GitHub first.")
+
+    except Exception as e:
+        st.error(f"Map failed to load: {e}")
 # =========================================================
 # TAB 7 — DATA
 # =========================================================
