@@ -20,7 +20,7 @@ st.set_page_config(
 )
 
 st.image(
-    "blueberry.png",
+    "md.jpeg",
     caption="Blueberry",
     use_container_width=True
 )
