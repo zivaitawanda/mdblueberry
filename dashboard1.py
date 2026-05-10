@@ -21,7 +21,7 @@ st.set_page_config(
 
 st.image(
     "md.jpeg",
-    caption="Blueberry",
+    caption="MudiwaFarm",
     use_container_width=True
 )
 
