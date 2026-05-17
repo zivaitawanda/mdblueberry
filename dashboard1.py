@@ -1,5 +1,5 @@
 # =========================================================
-# 🌱 FINAL DASHBOARD (DEPLOYMENT READY VERSION)
+#  FINAL DASHBOARD 
 # =========================================================
 
 import streamlit as st
@@ -18,7 +18,108 @@ st.set_page_config(
     page_title="Mudiwa Farm Analytics Dashboard",
     layout="wide"
 )
+# =========================================================
+# CONFIG
+# =========================================================
+st.set_page_config(
+    page_title="Mudiwa Farm Analytics Dashboard",
+    layout="wide"
+)
 
+# =========================================================
+# CUSTOM COLORS & STYLING
+# =========================================================
+st.markdown("""
+<style>
+
+/* MAIN BACKGROUND */
+.stApp {
+    background-color: #F4F7FA;
+}
+
+/* MAIN TITLES */
+h1, h2, h3 {
+    color: #0B1F5E;
+    font-weight: 700;
+}
+
+/* SIDEBAR */
+section[data-testid="stSidebar"] {
+    background-color: #0B1F5E;
+}
+
+/* SIDEBAR TEXT */
+section[data-testid="stSidebar"] * {
+    color: white;
+}
+
+/* SIDEBAR DROPDOWNS */
+div[data-baseweb="select"] > div {
+    background-color: white;
+    color: black;
+    border-radius: 10px;
+}
+
+/* TABS */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 18px;
+}
+
+.stTabs [data-baseweb="tab"] {
+    background-color: white;
+    border-radius: 10px;
+    padding: 10px 20px;
+    color: #0B1F5E;
+    font-weight: 600;
+}
+
+.stTabs [aria-selected="true"] {
+    background-color: #1B5E20 !important;
+    color: white !important;
+}
+
+/* TABLES */
+thead tr th {
+    background-color: #0B1F5E !important;
+    color: white !important;
+}
+
+/* METRIC BOXES */
+div[data-testid="metric-container"] {
+    background-color: white;
+    border: 2px solid #1B5E20;
+    padding: 15px;
+    border-radius: 15px;
+    box-shadow: 0px 4px 10px rgba(0,0,0,0.08);
+}
+
+/* BUTTONS */
+.stButton>button {
+    background-color: #1B5E20;
+    color: white;
+    border-radius: 10px;
+    border: none;
+    padding: 10px 18px;
+}
+
+.stButton>button:hover {
+    background-color: #145214;
+    color: white;
+}
+
+/* SUCCESS / INFO BOXES */
+div[data-baseweb="notification"] {
+    border-radius: 12px;
+}
+
+/* DATAFRAME */
+[data-testid="stDataFrame"] {
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+</style>
+""", unsafe_allow_html=True)
 st.image(
     "md.jpeg",
     caption="MudiwaFarm",
