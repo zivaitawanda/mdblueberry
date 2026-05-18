@@ -324,7 +324,7 @@ st.title("Mudiwa Farm Analytics Dashboard")
 # =========================================================
 # TABS
 # =========================================================
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+tab1, tab2, tab3, tab5, tab6, tab7, tab8 = st.tabs([
     "Yield Model",
     "Separability",
     "Feature Analysis",
