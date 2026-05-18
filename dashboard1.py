@@ -328,7 +328,6 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "Yield Model",
     "Separability",
     "Feature Analysis",
-    "Error Analysis",
     "Model Comparison",
     "Map View",
     "Data",
@@ -552,49 +551,6 @@ with tab3:
 
         st.pyplot(fig)
 
-# =========================================================
-# TAB 4 — ERROR ANALYSIS
-# =========================================================
-# TAB 4 — ERROR ANALYSIS
-# =========================================================
-with tab4:
-
-    st.header("Error Analysis")
-
-    col1, col2, col3 = st.columns(3)
-
-    col1.metric("Masena R²", "0.96")
-    col2.metric("Eureka R²", "0.93")
-    col3.metric("Combined R²", "0.89")
-
-    fig, ax = plt.subplots(figsize=(8,5))
-
-    sns.histplot(
-        df_vis["error"],
-        bins=10,
-        kde=True,
-        color="#1B5E20",
-        ax=ax
-    )
-
-    ax.axvline(
-        0,
-        color="red",
-        linestyle="--"
-    )
-
-    ax.set_title(
-        "Prediction Residual Distribution",
-        fontsize=16,
-        fontweight="bold"
-    )
-
-    st.pyplot(fig)
-
-    st.success("""
-    Most prediction errors remained within acceptable limits,
-    demonstrating strong agreement between observed and predicted yield values.
-    """)
 # =========================================================
 # TAB 5 — MODEL COMPARISON
 # =========================================================
