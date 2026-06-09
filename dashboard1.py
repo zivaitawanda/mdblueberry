@@ -852,24 +852,18 @@ with tab6:
         # ---------------------------------------------
         # DISPLAY MAP
         # ---------------------------------------------
-        st.pydeck_chart(
-
-            pdk.Deck(
-
-                layers=[
-                    polygon_layer,
-                    text_layer
-                ],
-
-                initial_view_state=view_state,
-
-                tooltip=tooltip,
-
-                map_style="road"
-            ),
-
-            use_container_width=True
-        )
+      st.pydeck_chart(
+    pdk.Deck(
+        layers=[
+            polygon_layer,
+            text_layer
+        ],
+        initial_view_state=view_state,
+        tooltip=tooltip,
+        map_style="https://basemaps.cartocdn.com/gl/satellite-gl-style/style.json"
+    ),
+    use_container_width=True
+)
 
     except Exception as e:
 
