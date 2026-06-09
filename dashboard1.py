@@ -295,22 +295,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
 # TAB 1 — YIELD MODEL
 # =========================================================
 with tab1:
-    from sklearn.metrics import r2_score
-
-for model in df_vis["model_clean"].unique():
-
-    subset = df_vis[df_vis["model_clean"] == model]
-
-    if len(subset) > 1:
-
-        r2 = r2_score(
-            subset["yield"],
-            subset["predicted_yield"]
-        )
-
-        st.write(f"{model}: R² = {r2:.3f}")
     
-
     st.header("Yield Prediction Performance")
 
     if model_choice == "All Models":
