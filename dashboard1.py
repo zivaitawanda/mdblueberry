@@ -125,7 +125,7 @@ st.image(
 @st.cache_data
 def load_data():
 
-    df = pd.read_csv("results_best090626.csv")
+    df = pd.read_csv("results_best09062026.csv")
 
     # -------------------------------
     # CLEAN COLUMN NAMES
@@ -185,22 +185,6 @@ def load_summary():
 
 
 df = load_data()
-# =========================================================
-if "predicted_yield" not in df.columns:
-    st.error(
-        "predicted_yield column not found in results CSV."
-    )
-    st.stop()
-
-df["error"] = df["yield"] - df["predicted_yield"]
-df["abs_error"] = df["error"].abs()
-
-# Recalculate errors
-df["error"] = (
-    df["yield"] - df["predicted_yield"]
-)
-
-df["abs_error"] = abs(df["error"])
 summary_df = load_summary()
 
 # =========================================================
@@ -296,10 +280,11 @@ st.title("Mudiwa Farm Analytics Dashboard")
 # =========================================================
 # TABS
 # =========================================================
-tab1, tab2, tab3, tab5, tab6, tab7, tab8 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "Yield Model",
     "Separability",
     "Feature Analysis",
+    "Error Analysis",
     "Model Comparison",
     "Map View",
     "Data",
@@ -418,6 +403,8 @@ with tab1:
         ax.legend()
 
         st.pyplot(fig)
+
+# =========================================================
 # TAB 2 — PCA
 # =========================================================
 with tab2:
@@ -524,6 +511,31 @@ with tab3:
         st.pyplot(fig)
 
 # =========================================================
+# TAB 4 — ERROR ANALYSIS
+# =========================================================
+with tab4:
+
+    st.header("Error Analysis")
+
+    if {
+        "model_clean",
+        "error"
+    }.issubset(df_vis.columns):
+
+        fig, ax = plt.subplots()
+
+        sns.boxplot(
+            x="model_clean",
+            y="error",
+            data=df_vis,
+            ax=ax
+        )
+
+        ax.set_title("Prediction Error by Model")
+
+        st.pyplot(fig)
+
+# =========================================================
 # TAB 5 — MODEL COMPARISON
 # =========================================================
 with tab5:
@@ -551,262 +563,11 @@ with tab5:
         st.pyplot(fig)
 
 # =========================================================
-
-# TAB 6 — MAP VIEW WITH ACTUAL PLOT SHAPES
+# TAB 6 — MAP VIEW
 # =========================================================
 with tab6:
-
-    st.header("Spatial View - Plot Boundaries")
-
-    import streamlit as st
-    import pandas as pd
-    import pydeck as pdk
-    import json
-
-    try:
-
-        # -------------------------------------------------
-        # LOAD GEOJSON
-        # -------------------------------------------------
-        with open("mgp.geojson", "r", encoding="utf-8") as f:
-            geojson_data = json.load(f)
-
-        # -------------------------------------------------
-        # CLEAN RESULT DATA
-        # -------------------------------------------------
-        df_map = df.copy()
-
-        df_map.columns = (
-            df_map.columns
-            .str.strip()
-            .str.lower()
-        )
-
-        df_map["plot_id"] = (
-            df_map["plot_id"]
-            .astype(str)
-            .str.strip()
-        )
-
-        # Remove duplicate plot IDs
-        df_map = df_map.drop_duplicates(
-            subset="plot_id",
-            keep="first"
-        )
-
-        # -------------------------------------------------
-        # CREATE LOOKUP DICTIONARY
-        # -------------------------------------------------
-        result_lookup = (
-            df_map
-            .set_index("plot_id")
-            .to_dict("index")
-        )
-
-        # -------------------------------------------------
-        # MERGE CSV RESULTS INTO GEOJSON
-        # -------------------------------------------------
-        for feature in geojson_data["features"]:
-
-            props = feature["properties"]
-
-            clean_props = {
-                str(k).strip().lower(): v
-                for k, v in props.items()
-            }
-
-            plot_id = str(
-                clean_props.get("plot_id", "")
-            ).strip()
-
-            if plot_id in result_lookup:
-                clean_props.update(result_lookup[plot_id])
-
-            feature["properties"] = clean_props
-
-        # -------------------------------------------------
-        # GET NUMERIC VARIABLES
-        # -------------------------------------------------
-        numeric_cols = (
-            df_map
-            .select_dtypes(include="number")
-            .columns
-            .tolist()
-        )
-
-        numeric_cols = [
-            c for c in numeric_cols
-            if c not in ["latitude", "longitude"]
-        ]
-
-        if len(numeric_cols) == 0:
-            st.warning("No numeric variables found.")
-            st.stop()
-
-        # -------------------------------------------------
-        # VARIABLE SELECTOR
-        # -------------------------------------------------
-        selected_value = st.selectbox(
-            "Select variable to visualize",
-            numeric_cols
-        )
-
-        # -------------------------------------------------
-        # NORMALIZE VALUES FOR COLOURING
-        # -------------------------------------------------
-        values = df_map[selected_value].dropna()
-
-        min_val = values.min()
-        max_val = values.max()
-
-        for feature in geojson_data["features"]:
-
-            props = feature["properties"]
-
-            value = props.get(selected_value, None)
-
-            if (
-                value is not None
-                and pd.notna(value)
-                and max_val != min_val
-            ):
-                norm_value = (
-                    (value - min_val)
-                    / (max_val - min_val)
-                )
-            else:
-                norm_value = 0
-
-            props["color_value"] = float(norm_value)
-
-        # -------------------------------------------------
-        # CALCULATE MAP CENTER
-        # -------------------------------------------------
-        all_lons = []
-        all_lats = []
-
-        for feature in geojson_data["features"]:
-
-            geom = feature["geometry"]
-
-            # POLYGON
-            if geom["type"] == "Polygon":
-
-                for ring in geom["coordinates"]:
-
-                    for lon, lat in ring:
-
-                        all_lons.append(lon)
-                        all_lats.append(lat)
-
-            # MULTIPOLYGON
-            elif geom["type"] == "MultiPolygon":
-
-                for polygon in geom["coordinates"]:
-
-                    for ring in polygon:
-
-                        for lon, lat in ring:
-
-                            all_lons.append(lon)
-                            all_lats.append(lat)
-
-        # Safety check
-        if len(all_lons) == 0:
-            st.error(
-                "No valid coordinates found in GeoJSON."
-            )
-            st.stop()
-
-        center_lon = sum(all_lons) / len(all_lons)
-        center_lat = sum(all_lats) / len(all_lats)
-
-        # -------------------------------------------------
-        # POLYGON LAYER
-        # -------------------------------------------------
-        polygon_layer = pdk.Layer(
-            "GeoJsonLayer",
-            data=geojson_data,
-
-            pickable=True,
-            stroked=True,
-            filled=True,
-
-            opacity=0.7,
-
-            get_fill_color="""
-            [
-                255 - properties.color_value * 255,
-                properties.color_value * 255,
-                100,
-                180
-            ]
-            """,
-
-            get_line_color="[255, 0, 0]",
-
-            line_width_min_pixels=2
-        )
-
-        # -------------------------------------------------
-        # VIEW STATE
-        # -------------------------------------------------
-        view_state = pdk.ViewState(
-            latitude=center_lat,
-            longitude=center_lon,
-            zoom=16,
-            pitch=0
-        )
-
-        # -------------------------------------------------
-        # TOOLTIP
-        # -------------------------------------------------
-        tooltip = {
-            "html": f"""
-            <b>Plot ID:</b> {{plot_id}} <br/>
-            <b>Cultivar:</b> {{cultivar}} <br/>
-            <b>{selected_value}:</b> {{{selected_value}}} <br/>
-            <b>Yield:</b> {{yield}} <br/>
-            <b>Predicted Yield:</b> {{predicted_yield}}
-            """,
-            "style": {
-                "backgroundColor": "black",
-                "color": "white"
-            }
-        }
-
-        # -------------------------------------------------
-        # DISPLAY MAP
-        # -------------------------------------------------
-        st.pydeck_chart(
-            pdk.Deck(
-                layers=[polygon_layer],
-
-                initial_view_state=view_state,
-
-                tooltip=tooltip,
-
-                # Remove basemap issues
-                map_style=None
-            ),
-
-            use_container_width=True
-        )
-
-    # -----------------------------------------------------
-    # ERRORS
-    # -----------------------------------------------------
-    except FileNotFoundError:
-
-        st.error(
-            "mergedplots.geojson not found. "
-            "Upload it to the same GitHub folder "
-            "as dashboard1.py"
-        )
-
-    except Exception as e:
-
-        st.error(f"Map failed to load: {e}")
+    st.header("Spatial View")
+    st.info("Map view temporarily disabled for cloud deployment.")
 # =========================================================
 # TAB 7 — DATA
 # =========================================================
@@ -828,15 +589,8 @@ with tab7:
 # =========================================================
 with tab8:
 
-    st.header("Best Time to Separate Cultivars and Predict Yield")
-
-    st.markdown(
-        """
-        This section answers two simple questions:
-
-        **1. When is the best time to tell blueberry cultivars apart?**  
-        **2. When is the best time to predict yield?**
-        """
+    st.header(
+        "Best Time to Separate Cultivars and Predict Yield"
     )
 
     stages = [
@@ -847,7 +601,6 @@ with tab8:
         "harvest"
     ]
 
-    # Known JM distance results
     jm_stage_df = pd.DataFrame({
         "stage": [
             "newshoots",
@@ -867,17 +620,18 @@ with tab8:
         "yield",
         "predicted_yield",
         "error",
-        "abs_error",
         "cultivar",
         "model",
         "model_clean",
-        "plot_id",
-        "latitude",
-        "longitude"
+        "plot_id"
     ]
 
     feature_cols = [
-        col for col in df_vis.select_dtypes(include="number").columns
+        col for col in (
+            df_vis
+            .select_dtypes(include="number")
+            .columns
+        )
         if col not in exclude_cols
     ]
 
@@ -902,23 +656,12 @@ with tab8:
             feature
             .lower()
             .replace(" ", "")
-            .replace("_", "")
         )
 
-        if "newshoot" in feature or "newleaf" in feature:
-            return "newshoots"
+        for stage in stages:
 
-        if "budding" in feature or "bud" in feature:
-            return "budding"
-
-        if "fruitset" in feature:
-            return "fruitset"
-
-        if "fruitdevelopment" in feature or "fruitdev" in feature:
-            return "fruitdevelopment"
-
-        if "harvest" in feature:
-            return "harvest"
+            if stage in feature:
+                return stage
 
         return "other"
 
@@ -931,10 +674,15 @@ with tab8:
         })
     )
 
-    importance_df["stage"] = importance_df["feature"].apply(get_stage)
+    importance_df["stage"] = (
+        importance_df["feature"]
+        .apply(get_stage)
+    )
 
     stage_importance_df = (
-        importance_df[importance_df["stage"] != "other"]
+        importance_df[
+            importance_df["stage"] != "other"
+        ]
         .groupby("stage", as_index=False)["importance"]
         .sum()
     )
@@ -946,190 +694,31 @@ with tab8:
         how="outer"
     ).fillna(0)
 
-    # Keep stages in correct crop-growth order
-    merged_df["stage"] = pd.Categorical(
-        merged_df["stage"],
-        categories=stages,
-        ordered=True
+    fig, ax1 = plt.subplots(figsize=(9, 5))
+
+    sns.lineplot(
+        data=merged_df,
+        x="stage",
+        y="jm_distance",
+        marker="o",
+        ax=ax1,
+        label="JM Distance"
     )
 
-    merged_df = merged_df.sort_values("stage")
+    ax2 = ax1.twinx()
 
-    # Normalize scores so layman can compare them easily
-    merged_df["separation_score"] = (
-        merged_df["jm_distance"] / merged_df["jm_distance"].max()
-    ) * 100
-
-    merged_df["yield_score"] = (
-        merged_df["importance"] / merged_df["importance"].max()
-    ) * 100
-
-    merged_df["overall_score"] = (
-        merged_df["separation_score"] + merged_df["yield_score"]
-    ) / 2
-
-    best_separation = merged_df.loc[
-        merged_df["separation_score"].idxmax()
-    ]
-
-    best_yield = merged_df.loc[
-        merged_df["yield_score"].idxmax()
-    ]
-
-    best_overall = merged_df.loc[
-        merged_df["overall_score"].idxmax()
-    ]
-
-    # -----------------------------------------------------
-    # SUMMARY CARDS
-    # -----------------------------------------------------
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.metric(
-            "Best for separating cultivars",
-            str(best_separation["stage"]).title(),
-            f'JM = {best_separation["jm_distance"]:.2f}'
-        )
-
-    with col2:
-        st.metric(
-            "Best for predicting yield",
-            str(best_yield["stage"]).title(),
-            f'Score = {best_yield["yield_score"]:.0f}/100'
-        )
-
-    with col3:
-        st.metric(
-            "Best overall timing",
-            str(best_overall["stage"]).title(),
-            f'Overall = {best_overall["overall_score"]:.0f}/100'
-        )
-
-    st.success(
-        f"""
-        **Main finding:** The best overall time is **{str(best_overall["stage"]).title()}**.
-        At this stage, the crop provides useful information for both identifying cultivar differences
-        and estimating yield.
-        """
+    sns.lineplot(
+        data=merged_df,
+        x="stage",
+        y="importance",
+        marker="s",
+        linestyle="--",
+        ax=ax2,
+        label="Yield Importance"
     )
 
-    st.info(
-        """
-        **How to read this:**  
-        A higher **separation score** means the cultivars look more different from each other.  
-        A higher **yield prediction score** means the image features from that stage are more useful
-        for estimating final yield.
-        """
+    ax1.set_title(
+        "Best Timing for Cultivar Separation and Yield Prediction"
     )
-
-    # -----------------------------------------------------
-    # LAYMAN-FRIENDLY TABLE
-    # -----------------------------------------------------
-    display_df = merged_df.copy()
-
-    display_df["Growth Stage"] = (
-        display_df["stage"]
-        .astype(str)
-        .str.replace("newshoots", "New Shoots")
-        .str.replace("fruitdevelopment", "Fruit Development")
-        .str.replace("fruitset", "Fruit Set")
-        .str.replace("budding", "Budding")
-        .str.replace("harvest", "Harvest")
-    )
-
-    display_df["Cultivar Separation Score"] = (
-        display_df["separation_score"]
-        .round(0)
-        .astype(int)
-    )
-
-    display_df["Yield Prediction Score"] = (
-        display_df["yield_score"]
-        .round(0)
-        .astype(int)
-    )
-
-    display_df["Overall Usefulness"] = (
-        display_df["overall_score"]
-        .round(0)
-        .astype(int)
-    )
-
-    display_df = display_df[
-        [
-            "Growth Stage",
-            "Cultivar Separation Score",
-            "Yield Prediction Score",
-            "Overall Usefulness"
-        ]
-    ]
-
-    st.subheader("Simple ranking of growth stages")
-
-    st.dataframe(
-        display_df.sort_values(
-            "Overall Usefulness",
-            ascending=False
-        ),
-        use_container_width=True,
-        hide_index=True
-    )
-
-    # -----------------------------------------------------
-    # BAR CHART
-    # -----------------------------------------------------
-    st.subheader("Comparison of growth stages")
-
-    chart_df = display_df.melt(
-        id_vars="Growth Stage",
-        value_vars=[
-            "Cultivar Separation Score",
-            "Yield Prediction Score",
-            "Overall Usefulness"
-        ],
-        var_name="Purpose",
-        value_name="Score"
-    )
-
-    fig, ax = plt.subplots(figsize=(11, 6))
-
-    sns.barplot(
-        data=chart_df,
-        x="Growth Stage",
-        y="Score",
-        hue="Purpose",
-        ax=ax
-    )
-
-    ax.set_title(
-        "Best Growth Stage for Cultivar Separation and Yield Prediction"
-    )
-
-    ax.set_ylabel("Score out of 100")
-    ax.set_xlabel("Growth Stage")
-    ax.set_ylim(0, 110)
-
-    plt.xticks(rotation=25)
-    plt.tight_layout()
 
     st.pyplot(fig)
-
-    # -----------------------------------------------------
-    # FINAL INTERPRETATION
-    # -----------------------------------------------------
-    st.subheader("Interpretation")
-
-    st.markdown(
-        f"""
-        - **{str(best_separation["stage"]).title()}** is the best stage for separating cultivars.
-        This means the satellite image features at this stage show the clearest differences
-        between cultivars such as Masena and Eureka.
-
-        - **{str(best_yield["stage"]).title()}** is the best stage for predicting yield.
-        This means the image features at this stage are most strongly linked to final production.
-
-        - **{str(best_overall["stage"]).title()}** is the best overall stage because it gives the
-        best balance between cultivar separation and yield prediction.
-        """
-    )
