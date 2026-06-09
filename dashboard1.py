@@ -565,9 +565,317 @@ with tab5:
 # =========================================================
 # TAB 6 — MAP VIEW
 # =========================================================
+# =========================================================
+# TAB 6 — MAP VIEW
+# =========================================================
 with tab6:
-    st.header("Spatial View")
-    st.info("Map view temporarily disabled for cloud deployment.")
+
+    st.header("Spatial View - Plot Boundaries")
+
+    import json
+    import pandas as pd
+    import pydeck as pdk
+
+    try:
+
+        # ---------------------------------------------
+        # LOAD GEOJSON
+        # ---------------------------------------------
+        with open("mergedplots.geojson", "r", encoding="utf-8") as f:
+            geojson_data = json.load(f)
+
+        # ---------------------------------------------
+        # CLEAN DATA
+        # ---------------------------------------------
+        df_map = df.copy()
+
+        df_map.columns = (
+            df_map.columns
+            .str.strip()
+            .str.lower()
+        )
+
+        df_map["plot_id"] = (
+            df_map["plot_id"]
+            .astype(str)
+            .str.strip()
+        )
+
+        # ---------------------------------------------
+        # REMOVE DUPLICATES
+        # ---------------------------------------------
+        df_map = df_map.drop_duplicates(
+            subset="plot_id",
+            keep="first"
+        )
+
+        # ---------------------------------------------
+        # LOOKUP TABLE
+        # ---------------------------------------------
+        result_lookup = (
+            df_map
+            .set_index("plot_id")
+            .to_dict("index")
+        )
+
+        # ---------------------------------------------
+        # MERGE CSV INTO GEOJSON
+        # ---------------------------------------------
+        for feature in geojson_data["features"]:
+
+            props = feature["properties"]
+
+            props = {
+                str(k).strip().lower(): v
+                for k, v in props.items()
+            }
+
+            plot_id = str(
+                props.get("plot_id", "")
+            ).strip()
+
+            if plot_id in result_lookup:
+
+                props.update(
+                    result_lookup[plot_id]
+                )
+
+            feature["properties"] = props
+
+        # ---------------------------------------------
+        # VARIABLES AVAILABLE
+        # ---------------------------------------------
+        numeric_cols = (
+            df_map
+            .select_dtypes(include="number")
+            .columns
+            .tolist()
+        )
+
+        numeric_cols = [
+            c for c in numeric_cols
+            if c not in [
+                "latitude",
+                "longitude"
+            ]
+        ]
+
+        selected_value = st.selectbox(
+            "Colour plots by",
+            numeric_cols,
+            index=numeric_cols.index(
+                "predicted_yield"
+            )
+            if "predicted_yield" in numeric_cols
+            else 0
+        )
+
+        # ---------------------------------------------
+        # NORMALISE COLOURS
+        # ---------------------------------------------
+        values = (
+            df_map[selected_value]
+            .dropna()
+        )
+
+        min_val = values.min()
+        max_val = values.max()
+
+        for feature in geojson_data["features"]:
+
+            props = feature["properties"]
+
+            value = props.get(
+                selected_value,
+                None
+            )
+
+            if (
+                value is not None
+                and pd.notna(value)
+                and max_val != min_val
+            ):
+                norm = (
+                    (value - min_val)
+                    /
+                    (max_val - min_val)
+                )
+
+            else:
+                norm = 0
+
+            props["color_value"] = float(norm)
+
+        # ---------------------------------------------
+        # CREATE LABELS
+        # ---------------------------------------------
+        label_data = []
+
+        all_lons = []
+        all_lats = []
+
+        for feature in geojson_data["features"]:
+
+            geom = feature["geometry"]
+
+            coords_for_label = []
+
+            if geom["type"] == "Polygon":
+
+                coords_for_label = geom["coordinates"][0]
+
+            elif geom["type"] == "MultiPolygon":
+
+                coords_for_label = geom["coordinates"][0][0]
+
+            if len(coords_for_label) == 0:
+                continue
+
+            lons = [c[0] for c in coords_for_label]
+            lats = [c[1] for c in coords_for_label]
+
+            center_lon = sum(lons) / len(lons)
+            center_lat = sum(lats) / len(lats)
+
+            all_lons.extend(lons)
+            all_lats.extend(lats)
+
+            plot_id = str(
+                feature["properties"]
+                .get("plot_id", "")
+            )
+
+            label_data.append({
+                "plot_id": plot_id,
+                "lon": center_lon,
+                "lat": center_lat
+            })
+
+        # ---------------------------------------------
+        # FARM CENTRE
+        # ---------------------------------------------
+        center_lon = (
+            sum(all_lons)
+            /
+            len(all_lons)
+        )
+
+        center_lat = (
+            sum(all_lats)
+            /
+            len(all_lats)
+        )
+
+        # ---------------------------------------------
+        # POLYGON LAYER
+        # ---------------------------------------------
+        polygon_layer = pdk.Layer(
+            "GeoJsonLayer",
+            data=geojson_data,
+
+            pickable=True,
+            stroked=True,
+            filled=True,
+
+            opacity=0.7,
+
+            get_fill_color="""
+            [
+                255 - properties.color_value * 255,
+                properties.color_value * 255,
+                80,
+                180
+            ]
+            """,
+
+            get_line_color=[
+                255,
+                255,
+                255
+            ],
+
+            line_width_min_pixels=2
+        )
+
+        # ---------------------------------------------
+        # LABEL LAYER
+        # ---------------------------------------------
+        text_layer = pdk.Layer(
+            "TextLayer",
+
+            data=label_data,
+
+            get_position='[lon, lat]',
+
+            get_text='plot_id',
+
+            get_size=16,
+
+            get_color=[
+                255,
+                255,
+                255
+            ],
+
+            get_angle=0,
+
+            pickable=False
+        )
+
+        # ---------------------------------------------
+        # VIEW STATE
+        # ---------------------------------------------
+        view_state = pdk.ViewState(
+            latitude=center_lat,
+            longitude=center_lon,
+            zoom=17,
+            pitch=0
+        )
+
+        # ---------------------------------------------
+        # TOOLTIP
+        # ---------------------------------------------
+        tooltip = {
+            "html": """
+            <b>Plot:</b> {plot_id}<br/>
+            <b>Cultivar:</b> {cultivar}<br/>
+            <b>Yield:</b> {yield}<br/>
+            <b>Predicted:</b> {predicted_yield}<br/>
+            <b>Error:</b> {error}
+            """,
+            "style": {
+                "backgroundColor": "black",
+                "color": "white"
+            }
+        }
+
+        # ---------------------------------------------
+        # DISPLAY MAP
+        # ---------------------------------------------
+        st.pydeck_chart(
+
+            pdk.Deck(
+
+                layers=[
+                    polygon_layer,
+                    text_layer
+                ],
+
+                initial_view_state=view_state,
+
+                tooltip=tooltip,
+
+                map_style="road"
+            ),
+
+            use_container_width=True
+        )
+
+    except Exception as e:
+
+        st.error(
+            f"Map failed to load: {e}"
+        )
 # =========================================================
 # TAB 7 — DATA
 # =========================================================
