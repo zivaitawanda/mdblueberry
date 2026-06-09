@@ -18,13 +18,6 @@ st.set_page_config(
     page_title="Mudiwa Farm Analytics Dashboard",
     layout="wide"
 )
-# =========================================================
-# CONFIG
-# =========================================================
-st.set_page_config(
-    page_title="Mudiwa Farm Analytics Dashboard",
-    layout="wide"
-)
 
 # =========================================================
 # CUSTOM COLORS & STYLING
@@ -193,35 +186,14 @@ def load_summary():
 
 df = load_data()
 # =========================================================
-# IMPROVED DISPLAY PREDICTIONS
-# =========================================================
+if "predicted_yield" not in df.columns:
+    st.error(
+        "predicted_yield column not found in results CSV."
+    )
+    st.stop()
 
-# Masena
-mask_masena = df["cultivar"] == "masena"
-
-df.loc[mask_masena, "predicted_yield"] = (
-    df.loc[mask_masena, "yield"] * 0.96
-    + 500
-)
-
-# Eureka
-mask_eureka = df["cultivar"] == "eureka"
-
-df.loc[mask_eureka, "predicted_yield"] = (
-    df.loc[mask_eureka, "yield"] * 0.93
-    + 700
-)
-
-# Combined
-mask_combined = (
-    (df["cultivar"] != "masena") &
-    (df["cultivar"] != "eureka")
-)
-
-df.loc[mask_combined, "predicted_yield"] = (
-    df.loc[mask_combined, "yield"] * 0.89
-    + 900
-)
+df["error"] = df["yield"] - df["predicted_yield"]
+df["abs_error"] = df["error"].abs()
 
 # Recalculate errors
 df["error"] = (
